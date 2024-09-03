@@ -1,0 +1,31 @@
+diff --git a/plat/rpi/common/rpi4_bl31_setup.c b/plat/rpi/common/rpi4_bl31_setup.c
+--- a/plat/rpi/common/rpi4_bl31_setup.c
++++ b/plat/rpi/common/rpi4_bl31_setup.c
+@@ -132,6 +132,27 @@ void bl31_early_platform_setup2(u_register_t arg0, u_register_t arg1,
+ 	/* Initialize the console to provide early debug support. */
+ 	rpi3_console_init();
+ 
++	/*
++	 * [RPI4 CONFIGURATION]
++	 * 1) Copy the OP-TEE OS image to the entry address, because the BL32 binaries are stored in the FIP address space (0x2000 => 128k bytes)
++	 * 2) Define the Device Tree Blob (DTB) address, calling the function rpi4_get_dtb_address()
++	 * 3) Define the Secure State as Secure
++	 *
++	 * Note: In this case, the OP-TEE OS image in no longer than 500k bytes
++	 */
++	const size_t trustedOS_size = 500 * 1024;									// Define the OP-TEE OS image size (500k bytes)
++	const void *const fip_addr = (const void*)0x20000;								// Define the OP-TEE OS image load address (FIP address - 0x20000)
++	void *const trustedOS_addr = (void*)0x10100000;									// Define the OP-TEE OS image address (Secure Payload - 0x10100000)
++	VERBOSE("rpi4: copy trusted_os image (%lu bytes) from %p to %p\n", trustedOS_size, fip_addr, trustedOS_addr);
++	memcpy(trustedOS_addr, fip_addr, trustedOS_size);								// Copy the OP-TEE OS image to the entry address
++
++	/* Initialize the OP-TEE OS image info. */
++	bl32_image_ep_info.pc = (uintptr_t)trustedOS_addr;								// Define the bl32 entry point address (0x10100000)
++	bl32_image_ep_info.args.arg2 = rpi4_get_dtb_address();								// Define the Device Tree Blob (DTB) address
++	SET_SECURITY_STATE(bl32_image_ep_info.h.attr, SECURE);								// Define the Secure State
++	VERBOSE("rpi4: trusted_os entry: %p\n", (void*)bl32_image_ep_info.pc);
++	VERBOSE("rpi4: bl32 dtb: %p\n", (void*)bl32_image_ep_info.args.arg2);
++
+ 	bl33_image_ep_info.pc = plat_get_ns_image_entrypoint();
+ 	bl33_image_ep_info.spsr = rpi3_get_spsr_for_bl33_entry();
+ 	SET_SECURITY_STATE(bl33_image_ep_info.h.attr, NON_SECURE);
